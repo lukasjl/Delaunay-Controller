@@ -1,0 +1,635 @@
+# Technical handover brief
+
+## Delaunay Controller — Autonomous Laboratory Intelligence and HyperspaceMapper
+
+Architecture substantially defined
+
+Implementation not yet validated end-to-end
+
+Research manuscript available
+
+Handover date: 6 November 2026\
+Project domain: Autonomous laboratories, experimental control, computational chemistry, active learning, geometric exploration and multimodal sensor fusion.
+
+### 1. Project identity and overall objective
+
+The project concerns the development of a Sensor-Field-Informed Delaunay Controller for autonomous experimental systems, with the longer-term objective of implementing a discovery-oriented self-driving laboratory.
+
+The central concept is to move beyond conventional closed-loop optimization.
+
+A conventional optimizer attempts to maximize a predefined objective. The proposed controller must additionally:
+
+- Reconstruct multidimensional experimental parameter spaces.
+- Detect boundaries between different physical or chemical regimes.
+- Identify regions of high uncertainty and high information value.
+- Integrate physical measurements with computational models.
+- Select new experiments adaptively.
+- Maintain stable experimental conditions through feedback control.
+- Operate with modular, asynchronous hardware and software components.
+
+The project has two complementary outputs:
+
+1. Scientific output: a research manuscript establishing the architecture, mathematical formulation, engineering rationale and validation requirements.
+2. Engineering output: a modular software and hardware control architecture that can ultimately operate an autonomous laboratory.
+
+The working platform name is HyperspaceMapper v2.0.
+
+The important distinction is that the architecture has been developed conceptually and documented in manuscript form. A complete, experimentally validated implementation has not yet been established.
+
+### 2. Architectural decisions
+
+The architecture has evolved from a temperature-control concept into a general experimental intelligence system.
+
+The principal architectural decision is to separate physical control, measurement, state estimation and scientific decision-making.
+
+#### 2.1 Computational architecture
+
+Scientific objective / Experiment constraints
+
+Target response, operating limits, discovery objectives
+
+Active experiment selection
+
+GP / UCB / Delaunay boundary detection
+
+Physical state estimation
+
+Kalman filtering / UKF / sensor fusion / physical priors
+
+Device abstraction and deterministic control
+
+Hardware drivers, synchronization, interlocks
+
+Physical experiment
+
+Actuation → stabilization → measurement
+
+Feedback loop
+
+Measurements return to state estimation and model updating
+
+The intended computational chain is:
+
+\\[ \boxed{ \mathrm{NMF} \rightarrow \mathrm{Delaunay} \rightarrow \mathrm{GP/UCB} \rightarrow \mathrm{Kalman/UKF} \rightarrow \mathrm{CFD\ priors} \rightarrow \mathrm{Control} } \\]
+
+The ordering above represents the conceptual processing chain, not a requirement that all algorithms execute sequentially. State estimation, thermal control and acquisition should operate as independent subloops.
+
+#### 2.2 Functional modules
+
+The HyperspaceMapper v2.0 architecture has four principal computational modules.
+
+| Module          | Function                               | Proposed implementation                          |
+| --------------- | -------------------------------------- | ------------------------------------------------ |
+| `hm.detect`     | Acquire multimodal sensor measurements | UV–Vis/NIR, Raman, thermal and other channels    |
+| `hm.deconvolve` | Infer chemical or physical state       | Physics-constrained NMF                          |
+| `hm.sample`     | Select the next experiment             | GP-UCB and Delaunay boundary detection           |
+| `hm.control`    | Maintain experimental conditions       | Kalman/UKF state estimation and feedback control |
+
+These modules should communicate through explicit interfaces. Hardware drivers must not depend on the choice of optimizer, and the experiment-selection engine must not depend on a particular instrument vendor.
+
+#### 2.3 Delaunay controller: principal methodological decision
+
+The Delaunay algorithm is not intended to replace Gaussian-process optimization.
+
+It adds a separate geometric representation of the sampled experimental domain.
+
+For sampled points:
+
+\\[ \mathcal{D}=\\{\mathbf{x}\_1,\ldots,\mathbf{x}\_N\\} \\]
+
+Delaunay tessellation constructs simplices connecting neighboring observations.
+
+For a simplex \\(S\\), a simple response-variation indicator is:
+
+\\[ \Delta y_S = \max\_{i\in S}(y_i)-\min\_{i\in S}(y_i) \\]
+
+Large values indicate candidate transition regions.
+
+The controller should combine three objectives:
+
+\\[ A(\mathbf{x}) = w_1 A\_{\mathrm{objective}}(\mathbf{x}) +w_2 A\_{\mathrm{uncertainty}}(\mathbf{x}) +w_3 A\_{\mathrm{boundary}}(\mathbf{x}) \\]
+
+Where:
+
+- \\(A\_{\mathrm{objective}}\\): exploitation of promising regions.
+- \\(A\_{\mathrm{uncertainty}}\\): exploration of poorly characterized regions.
+- \\(A\_{\mathrm{boundary}}\\): identification of regime transitions.
+
+Important decision: the Delaunay contribution is currently a geometric acquisition heuristic, not a mathematically established universally optimal sampling algorithm. Its effectiveness must be tested against alternative acquisition strategies.
+
+#### 2.4 Sensor-field-informed control
+
+A further development is the use of spatially distributed sensor information to estimate the underlying physical field.
+
+The controller should distinguish:
+
+1. Sensor measurements.
+2. Estimated physical state.
+3. Predicted state from the process model.
+4. Commanded control action.
+5. Realized experimental conditions.
+
+The Kalman/UKF layer is intended to reconcile measurements with dynamic models. CFD or other physics-based simulations provide priors, rather than replacing actual measurements.
+
+This is particularly important when temperature fields, thermal gradients, transport processes or reaction conditions cannot be measured everywhere directly.
+
+#### 2.5 Three-bus software architecture
+
+A further decision documented in the manuscript is to maintain three independent communication channels:
+
+- Control bus: deterministic device commands and safety interlocks.
+- Data bus: raw sensor measurements and experimental metadata.
+- Scientific-state bus: inferred states, uncertainties, acquisition scores and experiment decisions.
+
+This separation is a foundational interoperability requirement.
+
+### 3. Mathematical formulation
+
+The project uses multidimensional experimental-space representation.
+
+An experiment is represented by:
+
+\\[ \mathbf{x}=(x_1,x_2,\ldots,x_d) \\]
+
+The observed response is:
+
+\\[ \mathbf{y}=f(\mathbf{x})+\boldsymbol{\epsilon} \\]
+
+where \\(f\\) is the unknown physical or chemical response and \\(\boldsymbol{\epsilon}\\) represents measurement and process uncertainty.
+
+Gaussian-process inference
+
+\\[ y_p(\mathbf{x})\sim \mathrm{GP}\left(\mu_p(\mathbf{x}),k(\mathbf{x},\mathbf{x}')\right) \\]
+
+Upper-confidence-bound selection
+
+\\[ \mathbf{x}\_{t+1} = \arg\max\_{\mathbf{x}} \left[ \mu_p(\mathbf{x})+ \sqrt{\beta_t}\sigma_p(\mathbf{x}) \right] \\]
+
+Physics-constrained spectral decomposition
+
+A candidate formulation documented in the review is:
+
+\\[ \mathcal{L} = \\|X-WH\\|\_F^2+ \lambda_1 R\_{\mathrm{mass}}(H)+ \lambda_2 R\_{\mathrm{kin}}(H) \\]
+
+Here:
+
+- \\(X\\): measured spectral data.
+- \\(W\\): spectral component representation.
+- \\(H\\): component abundances or concentrations.
+- \\(R\_{\mathrm{mass}}\\): mass-balance regularization.
+- \\(R\_{\mathrm{kin}}\\): kinetic consistency regularization.
+
+The physical constraints must remain soft. Model bias and uncertainty must propagate into the inferred chemical state.
+
+An additional architectural decision is to represent an unknown chemical component explicitly. An unfamiliar species must not automatically be classified as a known substance with low confidence.
+
+### 4. Settled parameters and engineering requirements
+
+The project has several quantitative targets, but their status needs to be distinguished carefully.
+
+| Parameter                        | Target / requirement               | Status                  |
+| -------------------------------- | ---------------------------------- | ----------------------- |
+| Experimental cycle               | Under 27–30 s                      | Earlier design target   |
+| Inference latency                | Under 3 s                          | Earlier design target   |
+| Simultaneously resolved products | At least 8                         | Earlier design target   |
+| Chemical-state error             | At most 15%                        | Earlier design target   |
+| Process setpoint control         | Approximately ±2%                  | Earlier design target   |
+| Acquisition strategy             | Objective + uncertainty + boundary | Architectural decision  |
+| State estimator                  | Kalman / UKF                       | Proposed implementation |
+| Spectral inference               | Physics-constrained NMF            | Proposed implementation |
+| Physical priors                  | CFD-informed                       | Proposed implementation |
+| Hardware architecture            | Modular and asynchronous           | Architectural decision  |
+
+Validation required
+
+The numerical performance targets are not validated integrated-system specifications. In particular, the September review deliberately moved toward requirements that can be independently benchmarked rather than treating these numerical values as universal standards.
+
+The more defensible current requirement structure is:
+
+| Requirement                 | Measurement                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| R1 — Analytical bandwidth   | Useful observables per unit time                               |
+| R2 — State inference        | Concentration/identity error and uncertainty calibration       |
+| R3 — Exploration efficiency | Experiments required for boundary recovery at specified recall |
+| R4 — Process fidelity       | Difference between commanded and realized conditions           |
+
+This distinction must be preserved in future publications and technical documentation.
+
+### 5. Physical and software architecture
+
+The project is intended to support different laboratory configurations rather than one fixed hardware platform.
+
+#### 5.1 Physical subsystems
+
+| Subsystem            | Candidate implementation                     | Main validation requirement              |
+| -------------------- | -------------------------------------------- | ---------------------------------------- |
+| Fluidics             | Syringe/peristaltic pumps, valves            | Dispensing accuracy, contamination       |
+| Motion               | Cartesian stages, robotic manipulators       | Positioning repeatability                |
+| Reaction environment | Batch, flow or microfluidic reactor          | Chemical compatibility and stability     |
+| Thermal control      | Heaters, Peltier devices, RTDs/thermocouples | Uniformity, dynamic response             |
+| Optical sensing      | UV–Vis/NIR, LED/photodiode systems           | Calibration and signal-to-noise          |
+| Molecular sensing    | Raman and external analytical instruments    | Sensitivity and spectral reproducibility |
+| Embedded control     | Microcontrollers and SBCs                    | Deterministic execution                  |
+| Computational layer  | Python-based orchestration and ML            | Reliability and provenance               |
+
+A hybrid approach is preferred: open-source and locally manufacturable hardware where practical, with commercial analytical instruments where their performance justifies the cost.
+
+#### 5.2 Asynchronous operation
+
+The hardware and computational loops have different timescales.
+
+- Embedded thermal control: potentially sub-second.
+- Sensor acquisition: seconds.
+- Chemical-state inference: after acquisition or continuously where appropriate.
+- Experiment selection: after sufficient new information becomes available.
+- Campaign-level planning: at a higher timescale.
+
+A synchronous architecture would unnecessarily block faster components while slower operations finish.
+
+The recommended design is asynchronous orchestration around a shared experimental state.
+
+#### 5.3 Data provenance
+
+Every experiment should preserve:
+
+- Experiment identifier and timestamp.
+- Commanded experimental conditions.
+- Realized process conditions.
+- Reagent identifiers and concentrations.
+- Sensor calibration status.
+- Instrument configuration.
+- Raw analytical data.
+- Inferred state and uncertainty.
+- Algorithm and model versions.
+- Acquisition scores and decision rationale.
+- Quality-control flags.
+- Failures and recovery actions.
+
+This is a mandatory scientific-reproducibility requirement, not an optional logging feature.
+
+#### 5.4 Failure recovery
+
+The proposed recovery hierarchy is:
+
+\\[ \mathrm{Retry} \rightarrow\mathrm{Recalibrate} \rightarrow\mathrm{Remeasure} \rightarrow\mathrm{Replan} \rightarrow\mathrm{Human\ intervention} \\]
+
+Safety shutdown and emergency intervention must remain independent of the experiment planner.
+
+### 6. Existing documents and file structures
+
+The available project records establish a manuscript-based development history. They do not establish that a complete software repository or executable HyperspaceMapper implementation has already been created.
+
+#### 6.1 Verified manuscript artifacts
+
+ChemRobots_Appropriate_Technology_review_final.tex
+
+Available
+
+LaTeX source · 78,802 bytes · 6 September 2026
+
+Main review manuscript covering ChemRobot architecture, appropriate technology, active learning, sensing and HyperspaceMapper v2.0.
+
+ChemRobots_Appropriate_Technology_review_final.pdf
+
+Available
+
+PDF · 956,383 bytes · 6 September 2026
+
+Compiled manuscript.
+
+ChemRobots_Appropriate_Technology_review_annotated.tex
+
+Available
+
+LaTeX source · 83,234 bytes · 11 September 2026
+
+Review version with numbered editorial comments C1–C21.
+
+ChemRobots_Appropriate_Technology_review_annotated.pdf
+
+Available
+
+PDF · 407,170 bytes · 11 September 2026
+
+Compiled annotated version.
+
+The files are available in the project-related Library records. They should be treated as the current documentary baseline, not as evidence of a completed controller implementation.
+
+ChemRobots_Appropriate_Technology_review_annotated.tex
+
+ChemRobots_Appropriate_Technology_review_final.tex
+
+#### 6.2 Proposed software repository structure
+
+An earlier repository proposal used `physics-informed-ded/` as the organizing structure. It is a proposed structure, not a verified existing directory.
+
+```
+physics-informed-ded/
+│
+├── README.md
+├── LICENSE
+├── CITATION.cff
+│
+├── docs/
+│   ├── architecture.md
+│   ├── mathematical_model.md
+│   ├── requirements.md
+│   └── validation_plan.md
+│
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   └── synthetic/
+│
+├── notebooks/
+│   ├── 01_experimental_space.ipynb
+│   ├── 02_delaunay_analysis.ipynb
+│   ├── 03_gp_ucb.ipynb
+│   └── 04_sensor_fusion.ipynb
+│
+├── src/
+│   ├── hyperspacemapper/
+│   │   ├── detect/
+│   │   ├── deconvolve/
+│   │   ├── sample/
+│   │   ├── control/
+│   │   ├── state_estimation/
+│   │   ├── orchestration/
+│   │   └── provenance/
+│
+├── examples/
+│   ├── synthetic_2d/
+│   └── closed_loop_demo/
+│
+├── figures/
+│
+└── tests/
+    ├── test_delaunay.py
+    ├── test_gp_ucb.py
+    ├── test_state_estimation.py
+    └── test_control.py
+```
+
+One important correction is required: the earlier `physics-informed-ded` proposal originated in the DED/ML-SmartMelting context. For the current chemical-laboratory controller, a separate repository named `hyperspacemapper` would provide clearer project boundaries. The repository name and actual directory structure remain to be established.
+
+#### 6.3 Manuscript figure dependencies
+
+The annotated manuscript identifies two missing figure sources:
+
+- `figures/fig1_grid_vs_adaptive.pdf`
+- `figures/fig3_delaunay_boundary.pdf`
+
+These must be recovered or reconstructed.
+
+The first figure has a particularly important provenance problem: its illustrated 80% reduction in experiment count must not be presented as an experimentally established result.
+
+### 7. Manuscript development status
+
+The September 11 annotated manuscript contains 21 numbered editorial comments.
+
+The most consequential outstanding issues are:
+
+| Comment | Issue                                       | Required action                                                   |
+| ------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| C1–C3   | Literature coverage and novelty positioning | Verify references and distinguish established work from synthesis |
+| C4      | Autonomy taxonomy                           | Map autonomy levels to measurable requirements                    |
+| C5      | Figure provenance and 80% claim             | Recover original or produce reproducible simulation               |
+| C6–C9   | Quantitative requirements                   | Define protocols, uncertainty and acceptance criteria             |
+| C11     | GP-UCB/Delaunay methodological risk         | Add baselines and failure conditions                              |
+| C12     | Architectural maturity                      | Distinguish demonstrated, adapted and proposed components         |
+| C17     | Performance metrics                         | Define units and measurable evaluation criteria                   |
+| C18     | Comparison with existing SDLs               | Add a consistent comparison matrix                                |
+| C19     | HyperspaceMapper novelty                    | Clarify the relationship to earlier versions                      |
+| C20     | Validation priorities                       | Develop a risk-based experimental roadmap                         |
+| C21     | Conclusions                                 | Separate evidence, engineering principles and hypotheses          |
+
+Other significant manuscript requirements include:
+
+1. Explicitly justify the multimodal sensing configuration.
+2. Define how unknown chemical components are detected.
+3. Address model bias in physics-constrained NMF.
+4. Analyze the computational scaling of Delaunay tessellation.
+5. Include sensor drift and calibration uncertainty.
+6. Explain the limits of DIY instrumentation.
+7. Establish independent validation of the proposed architecture.
+
+The review already has a substantial literature foundation, including work on robotic synthesis, autonomous flow chemistry, AlphaFlow, autonomous inorganic-material synthesis, mobile robotic chemistry and reaction-hyperspace mapping.
+
+The main writing task is no longer simply adding literature. It is improving the evidence hierarchy and making the proposed engineering contribution quantitatively testable.
+
+### 8. Important scope boundaries
+
+The project has connections to earlier laser DED and additive-manufacturing research, but these should not be confused with the current ChemRobot implementation.
+
+The transfer of engineering concepts is legitimate:
+
+- DED thermal control → chemical reactor thermal control.
+- DED sensor feedback → multimodal reaction monitoring.
+- CFD process priors → reaction-field and transport priors.
+- Delaunay parameter-space exploration → chemical hyperspace exploration.
+- Industrial process control → autonomous laboratory orchestration.
+
+However, previous manufacturing implementations do not establish that the complete chemical-laboratory architecture has been experimentally validated.
+
+The September manuscript explicitly excludes DED, metal additive manufacturing and related manufacturing applications from its review scope.
+
+The distinction between engineering provenance and demonstrated performance must remain explicit.
+
+### 9. Exact next steps: implementation roadmap
+
+The following sequence is recommended. It preserves the existing architecture while avoiding premature integration of unvalidated components.
+
+1. Phase 1 — Freeze the scientific specification
+
+   Can start immediately
+
+   Deliverables:
+   - Architecture specification v1.0.
+   - Mathematical formulation.
+   - Interface definitions for the four `hm` modules.
+   - Requirements and acceptance criteria.
+   - Classification of components as demonstrated, adapted or proposed.
+   Exit criterion: one internally consistent technical specification.
+2. Phase 2 — Implement the Delaunay engine
+
+   Deliverables:
+   - Synthetic multidimensional datasets.
+   - Delaunay triangulation.
+   - Simplex response-variation calculation.
+   - Boundary candidate detection.
+   - Visualization of sampled points and detected boundaries.
+   - Tests for degenerate and sparse datasets.
+   Compare against uniform-grid sampling and a response-gradient baseline.
+
+   Exit criterion: reproducible boundary detection on synthetic test cases.
+3. Phase 3 — Integrate GP-UCB
+
+   Deliverables:
+   - Gaussian-process regression.
+   - Predictive mean and uncertainty.
+   - UCB acquisition function.
+   - Combined boundary-aware acquisition.
+   - Configurable acquisition weights.
+   Test three separate configurations:
+   1. GP-UCB alone.
+   2. Delaunay boundary sampling alone.
+   3. Combined GP-UCB + Delaunay.
+   Exit criterion: quantitative comparison using experiment count, boundary recall and uncertainty calibration.
+4. Phase 4 — Implement sensor-state estimation
+
+   Deliverables:
+   - Sensor abstraction.
+   - Kalman filter baseline.
+   - UKF implementation.
+   - Sensor uncertainty propagation.
+   - Physics-informed prediction interface.
+   - Simulated disturbances and measurement noise.
+   CFD should initially enter as a prior or model input, not as an assumed ground truth.
+
+   Exit criterion: verified state estimation under controlled synthetic disturbances.
+5. Phase 5 — Integrate NMF and physical control
+
+   Deliverables:
+   - Spectral data interface.
+   - NMF decomposition.
+   - Mass-balance regularization.
+   - Kinetic regularization.
+   - Explicit unknown-component detection.
+   - Process-control simulation.
+   - Safety and interlock interface.
+   Exit criterion: validated state reconstruction and control performance against independently generated reference data.
+6. Phase 6 — Closed-loop autonomous laboratory prototype
+
+   Deliverables:
+   - Asynchronous orchestration.
+   - Hardware abstraction.
+   - Three-bus communication architecture.
+   - Experiment database.
+   - Complete provenance.
+   - Recovery and human-intervention mechanisms.
+   Exit criterion: repeatable closed-loop experimental campaign with documented uncertainty and failure handling.
+7. Phase 7 — Scientific publication and demonstration
+
+   Deliverables:
+   - Completed ChemRobots review.
+   - Reproducible numerical benchmark.
+   - Software release.
+   - Experimental validation.
+   - Technical demonstration of HyperspaceMapper v2.0.
+   Exit criterion: independent reproduction of the principal scientific claims.
+
+### 10. Immediate task list
+
+These are the concrete tasks that should be executed next, in order.
+
+| Priority | Task                                       | Deliverable                    |
+| -------- | ------------------------------------------ | ------------------------------ |
+| P0       | Retrieve and reconcile manuscript versions | Canonical manuscript           |
+| P0       | Recover or reconstruct two missing figures | Figure source files            |
+| P0       | Resolve C5, C11, C12 and C19               | Corrected scientific claims    |
+| P1       | Formalize Delaunay boundary algorithm      | Mathematical specification     |
+| P1       | Create synthetic benchmark                 | Dataset and reference results  |
+| P1       | Implement Delaunay + GP-UCB                | First executable prototype     |
+| P2       | Implement Kalman/UKF                       | State-estimation module        |
+| P2       | Define NMF input/output interfaces         | Inference module specification |
+| P3       | Establish hardware abstraction             | Controller interface           |
+| P3       | Integrate asynchronous orchestration       | Closed-loop prototype          |
+
+### 11. Decisions that must not be changed without justification
+
+The following should be treated as established project principles:
+
+1. Delaunay triangulation is used for geometric boundary detection, not as a replacement for GP.
+2. GP-UCB provides uncertainty-aware adaptive sampling.
+3. The acquisition strategy must support optimization and discovery simultaneously.
+4. NMF must incorporate physical constraints without overconstraining the data.
+5. Kalman/UKF methods provide state estimation and sensor fusion.
+6. CFD provides physical priors and model information.
+7. Deterministic hardware control must be separated from AI decision-making.
+8. The architecture must support asynchronous operation.
+9. Unknown states must be representable explicitly.
+10. All experimental decisions and measurements must be traceable.
+11. Safety and emergency shutdown must remain independent of the AI planner.
+12. Performance claims must be supported by reproducible benchmarks.
+
+### 12. Outstanding information and unresolved decisions
+
+Several details cannot be established from the available project records and must not be invented.
+
+| Item                                             | Current status   |
+| ------------------------------------------------ | ---------------- |
+| Canonical GitHub repository                      | Not established  |
+| Actual HyperspaceMapper source code              | Not verified     |
+| Programming language for complete implementation | Not frozen       |
+| Specific hardware configuration                  | Not frozen       |
+| Exact sensor models                              | Not established  |
+| Delaunay threshold and normalization             | Not frozen       |
+| GP kernel and hyperparameter strategy            | Not frozen       |
+| UCB exploration schedule \\(\beta_t\\)           | Not frozen       |
+| Acquisition weights \\(w_1,w_2,w_3\\)            | Not frozen       |
+| Kalman versus UKF selection by process           | Requires testing |
+| CFD coupling interface                           | Not implemented  |
+| Validated integrated performance                 | Not established  |
+
+The earlier proposed targets (30-second cycle, 3-second inference, eight products, 15% error and 2% control tolerance) should remain reference targets until their definitions and validation protocols are finalized.
+
+## 13. Final project status
+
+# Project maturity assessment
+
+Scientific concept
+
+Established
+
+System architecture
+
+Substantially defined
+
+Mathematical framework
+
+Partially specified
+
+Manuscript
+
+Revision required
+
+Algorithm implementation
+
+Not verified
+
+Hardware integration
+
+Not established
+
+Experimental validation
+
+Not established
+
+Overall assessment
+
+The project has progressed beyond an initial conceptual proposal. Its strongest achievement is a coherent systems-engineering framework connecting geometric exploration, Bayesian inference, sensor fusion, physical priors and autonomous experimental control.
+
+The principal remaining gap is the transition from architecture and manuscript to executable, independently validated software.
+
+### 14. Recommended immediate continuation
+
+I recommend treating the next development milestone as:
+
+HyperspaceMapper v2.0 — Computational Core, Release 0.1
+
+The first release should contain only:
+
+- Synthetic experimental-space generator.
+- Delaunay tessellation.
+- Boundary detection.
+- Gaussian-process regression.
+- GP-UCB acquisition.
+- Combined acquisition function.
+- Reproducible benchmarking.
+- Unit tests and technical documentation.
+
+Do not integrate physical hardware, Raman/NIR instruments or CFD at this stage. Establish the numerical validity of the central algorithm first.
+
+This will produce a demonstrable computational contribution, a defensible scientific benchmark and a foundation for subsequent sensor-field-informed control.
+
+The immediate next action should be to formalize and implement the Delaunay + GP-UCB computational core, while independently bringing the annotated ChemRobots manuscript to a submission-quality state.
